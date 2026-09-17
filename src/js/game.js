@@ -15,10 +15,10 @@ const GHOST_SPEED = 0.1;    // 1/10 celda/frame
 
 // Velocidad en celdas/frame. 1/k con k entero -> celda alineada cada k frames.
 const GHOST_SPECS = {
-  chaser:   { speed: 1 / 8,  color: '#ff0000' },
-  ambusher: { speed: 1 / 10, color: '#ffb8ff' },
-  brain:    { speed: 1 / 9,  color: '#00ffff' },
-  shy:      { speed: 1 / 12, color: '#ffb852' },
+  chaser:   { speed: 1 / 8,  color: '#ff0000', release: 0 },
+  ambusher: { speed: 1 / 10, color: '#ffb8ff', release: 0 },
+  brain:    { speed: 1 / 9,  color: '#00ffff', release: 60 },
+  shy:      { speed: 1 / 12, color: '#ffb852', release: 120 },
 };
 
 // Crea una partida nueva. Copia MAZE (pristino) a game.grid para poder comer
@@ -51,6 +51,7 @@ function createGame() {
       kind: g.kind,
       speed: GHOST_SPECS[ g.kind ].speed,
       color: GHOST_SPECS[ g.kind ].color,
+      wait: GHOST_SPECS[ g.kind ].release,
     } ) ),
   };
 }
@@ -187,14 +188,38 @@ function decideGhost( game, g ) {
   g.dir = best;
 }
 
+// Región de la pen (cols 11-16, filas 13-15) mas la puerta en si
+// (cols 13-14, fila 12). Deteccion re-disparable, sin flags.
+function inPenExit( g ) {
+  if ( g.x >= 11 && g.x <= 16 && g.y >= 13 && g.y <= 15 ) return true;
+  return g.y === 12 && ( g.x === 13 || g.x === 14 );
+}
+
 function moveGhost( game, g ) {
   const grid = game.grid;
   const width = grid[ 0 ].length;
 
+  // Congelado en la celda durante el retardo de salida de la pen.
+  if ( g.wait > 0 ) {
+    g.wait--;
+    return;
+  }
+
   if ( aligned( g.x ) && aligned( g.y ) ) {
     g.x = Math.round( g.x );
     g.y = Math.round( g.y );
-    decideGhost( game, g );
+    if ( inPenExit( g ) && g.wait === 0 ) {
+      // Ruta forzada hacia la puerta: acercarse a las cols 13-14 y subir.
+      if ( g.y >= 13 ) {
+        if ( g.x < 13 ) g.dir = 'right';
+        else if ( g.x > 14 ) g.dir = 'left';
+        else g.dir = 'up';
+      } else {
+        g.dir = 'up';
+      }
+    } else {
+      decideGhost( game, g );
+    }
     if ( !canMove( grid, g.x, g.y, g.dir, 'ghost' ) ) return;
   }
 
@@ -214,6 +239,7 @@ function resetPositions( game ) {
     g.x = GHOST_STARTS[ i ].x;
     g.y = GHOST_STARTS[ i ].y;
     g.dir = 'up';
+    g.wait = GHOST_SPECS[ g.kind ].release;
   } );
 }
 
